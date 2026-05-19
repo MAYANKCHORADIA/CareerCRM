@@ -1,0 +1,70 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────
+
+enum ApplicationStatus {
+  SAVED
+  APPLIED
+  ASSESSMENT
+  INTERVIEW
+  OFFER
+  REJECTED
+}
+
+// ─── Models ──────────────────────────────────────────────────────────
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String?
+  avatarUrl    String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  applications Application[]
+
+  @@map("users")
+}
+
+model Application {
+  id          String            @id @default(cuid())
+  companyName String
+  roleTitle   String
+  status      ApplicationStatus @default(SAVED)
+  appliedDate DateTime?
+  lastUpdated DateTime          @updatedAt
+  notes          String?
+  timelineEvents TimelineEvent[]
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@map("applications")
+}
+
+model TimelineEvent {
+  id            String      @id @default(cuid())
+  content       String
+  createdAt     DateTime    @default(now())
+
+  // Relations
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("timeline_events")
+}
