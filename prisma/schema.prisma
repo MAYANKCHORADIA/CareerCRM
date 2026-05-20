@@ -44,6 +44,7 @@ model Application {
   lastUpdated DateTime          @updatedAt
   notes          String?
   timelineEvents TimelineEvent[]
+  tasks          Task[]
 
   // Relations
   userId String
@@ -67,4 +68,19 @@ model TimelineEvent {
 
   @@index([applicationId])
   @@map("timeline_events")
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  dueDate     DateTime?
+  isCompleted Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  // Relations
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("tasks")
 }

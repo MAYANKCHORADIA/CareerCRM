@@ -3,7 +3,9 @@ import prisma from "@/lib/prisma";
 import {
   extractApplicationData,
   type ExtractedApplicationData,
+  type ExtractedTask,
 } from "@/lib/extractApplicationData";
+import { ApplicationStatus } from "@/generated/prisma/enums";
 
 /**
  * Google Workspace Gmail Add-on — Sync Action (Alternate Runtime)
@@ -87,17 +89,162 @@ function buildErrorCard(title: string, detail: string) {
   };
 }
 
+// ─── Status Progression ──────────────────────────────────────────────
+
+/**
+ * Rank each status in the hiring pipeline.
+ * Higher rank = further along.  REJECTED is special (-1).
+ */
+const STATUS_RANK: Record<ApplicationStatus, number> = {
+  SAVED: 0,
+  APPLIED: 1,
+  ASSESSMENT: 2,
+  INTERVIEW: 3,
+  OFFER: 4,
+  REJECTED: -1,
+};
+
+/**
+ * Determine whether the incoming status should replace the current one.
+ *
+ * Rules:
+ *  - REJECTED / OFFER are terminal — always accepted.
+ *  - From a terminal state (OFFER / REJECTED), no further changes
+ *    unless the incoming status is also terminal.
+ *  - Otherwise only advance forward in the pipeline.
+ */
+function shouldUpdateStatus(
+  current: ApplicationStatus,
+  incoming: ApplicationStatus
+): boolean {
+  // Terminal incoming statuses always take effect
+  if (incoming === "REJECTED" || incoming === "OFFER") return true;
+  // Don't regress from a terminal state
+  if (current === "OFFER" || current === "REJECTED") return false;
+  // Only move forward in the pipeline
+  return STATUS_RANK[incoming] > STATUS_RANK[current];
+}
+
+/**
+ * Normalize a company name for duplicate comparison:
+ * lowercase, trim, strip common suffixes (Inc., LLC, Corp., Ltd.).
+ */
+function normalizeCompanyName(name: string): string {
+  return name
+    .trim()
+    .replace(
+      /\b(inc\.?|llc\.?|corp\.?|ltd\.?|co\.?|limited|corporation|incorporated)\s*$/i,
+      ""
+    )
+    .replace(/[,.\s]+$/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 /** Build a Google Card Service success card. */
-function buildSuccessCard(data: ExtractedApplicationData, isNew: boolean) {
+function buildSuccessCard(
+  data: ExtractedApplicationData,
+  isNew: boolean,
+  previousStatus?: ApplicationStatus,
+  createdTaskCount?: number
+) {
   const actionItemWidgets =
     data.actionItems.length > 0
       ? data.actionItems.map((item) => ({
           decoratedText: {
-            text: `• ${item}`,
+            text: item,
             wrapText: true,
+            startIcon: { knownIcon: "DESCRIPTION" },
           },
         }))
-      : [{ decoratedText: { text: "No action items found.", wrapText: true } }];
+      : [{ decoratedText: { text: "No action items identified.", wrapText: true } }];
+
+  // Build task widgets if tasks were created
+  const taskWidgets =
+    data.tasks.length > 0
+      ? data.tasks.map((t) => ({
+          decoratedText: {
+            topLabel: t.dueDate
+              ? `DUE: ${new Date(t.dueDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}`
+              : "NO DUE DATE",
+            text: `<b>${t.title}</b>`,
+            wrapText: true,
+            startIcon: { knownIcon: "CLOCK" },
+          },
+        }))
+      : [];
+
+  const sections = [
+    {
+      widgets: [
+        {
+          textParagraph: {
+            text: isNew
+              ? `<b>✨ Successfully added to your CRM!</b><br>We've tracked this new application for you.`
+              : `<b>✅ Successfully updated!</b><br>${previousStatus ? `Moved from <b>${previousStatus}</b> to <b>${data.newStatus}</b>.` : "Your application details have been refreshed."}`,
+          },
+        },
+      ],
+    },
+    {
+      header: "Application Details",
+      widgets: [
+        {
+          decoratedText: {
+            topLabel: "COMPANY",
+            text: `<b>${data.companyName}</b>`,
+            startIcon: { knownIcon: "STORE" },
+          },
+        },
+        {
+          decoratedText: {
+            topLabel: "ROLE",
+            text: data.roleTitle,
+            startIcon: { knownIcon: "PERSON" },
+          },
+        },
+        {
+          decoratedText: {
+            topLabel: "CURRENT STATUS",
+            text: `<font color=\"#4CAF50\"><b>${data.newStatus}</b></font>`,
+            startIcon: { knownIcon: "STAR" },
+          },
+        },
+      ],
+    },
+    {
+      header: "Action Items",
+      widgets: actionItemWidgets,
+    },
+    // Tasks section — only shown when tasks were extracted
+    ...(taskWidgets.length > 0
+      ? [
+          {
+            header: `Pending Tasks (${createdTaskCount ?? taskWidgets.length})`,
+            widgets: taskWidgets,
+          },
+        ]
+      : []),
+    {
+      widgets: [
+        {
+          buttonList: {
+            buttons: [
+              {
+                text: "View in CareerCRM",
+                color: { red: 0.25, green: 0.38, blue: 0.96, alpha: 1.0 },
+                onClick: {
+                  openLink: {
+                    url: "https://careercrm.dev/dashboard",
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  ];
 
   return {
     action: {
@@ -105,41 +252,12 @@ function buildSuccessCard(data: ExtractedApplicationData, isNew: boolean) {
         {
           pushCard: {
             header: {
-              title: "Success! Dashboard updated",
-              subtitle: isNew ? "New application created" : "Application updated",
+              title: "Sync Complete",
+              subtitle: "CareerCRM",
+              imageUrl: "https://www.gstatic.com/images/icons/material/system/2x/check_circle_outline_green_48dp.png",
+              imageType: "CIRCLE",
             },
-            sections: [
-              {
-                header: "Extracted Data",
-                widgets: [
-                  {
-                    decoratedText: {
-                      topLabel: "COMPANY",
-                      text: data.companyName,
-                      startIcon: { knownIcon: "HOTEL_ROOM_TYPE" },
-                    },
-                  },
-                  {
-                    decoratedText: {
-                      topLabel: "ROLE",
-                      text: data.roleTitle,
-                      startIcon: { knownIcon: "BOOKMARK" },
-                    },
-                  },
-                  {
-                    decoratedText: {
-                      topLabel: "STATUS",
-                      text: data.newStatus,
-                      startIcon: { knownIcon: "STAR" },
-                    },
-                  },
-                ],
-              },
-              {
-                header: "Action Items",
-                widgets: actionItemWidgets,
-              },
-            ],
+            sections,
           },
         },
       ],
@@ -239,7 +357,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { companyName, roleTitle, newStatus, actionItems } = extraction.data;
+  const { companyName, roleTitle, newStatus, actionItems, tasks } = extraction.data;
 
   // ── 4. Upsert into Postgres via Prisma ──────────────────────────
   try {
@@ -257,26 +375,44 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Check if an application already exists for this company + role + user
-    const existing = await prisma.application.findFirst({
-      where: {
-        companyName,
-        roleTitle,
-        userId: user.id,
-      },
+    // ── Smart duplicate detection ─────────────────────────────────
+    // Fetch all applications for this user and compare with normalized
+    // company names to catch variants like "Google" vs "Google Inc."
+    const userApps = await prisma.application.findMany({
+      where: { userId: user.id },
     });
+
+    const normIncomingCompany = normalizeCompanyName(companyName);
+    const normIncomingRole = roleTitle.toLowerCase().trim();
+
+    const existing = userApps.find(
+      (app) =>
+        normalizeCompanyName(app.companyName) === normIncomingCompany &&
+        app.roleTitle.toLowerCase().trim() === normIncomingRole
+    );
 
     let application;
     let isNew = false;
+    let previousStatus: ApplicationStatus | undefined;
+    let statusDidChange = false;
 
     if (existing) {
-      // Update status on the existing application
-      application = await prisma.application.update({
-        where: { id: existing.id },
-        data: { status: newStatus },
-      });
+      previousStatus = existing.status;
+
+      if (shouldUpdateStatus(existing.status, newStatus)) {
+        // Advance the pipeline — update the status
+        statusDidChange = true;
+        application = await prisma.application.update({
+          where: { id: existing.id },
+          data: { status: newStatus },
+        });
+      } else {
+        // Status would regress or is unchanged — keep current status
+        // but still log the sync event for audit trail
+        application = existing;
+      }
     } else {
-      // Create a brand-new application
+      // No match found — create a brand-new application
       isNew = true;
       application = await prisma.application.create({
         data: {
@@ -285,29 +421,76 @@ export async function POST(request: NextRequest) {
           status: newStatus,
           appliedDate: new Date(),
           userId: user.id,
-          notes: `Synced from Gmail add-on.`,
+          notes: "Synced from Gmail add-on.",
         },
       });
     }
 
-    // Create a timeline event capturing what happened
-    const timelineContent = [
-      `📧 Synced from Gmail`,
-      `Status: ${newStatus}`,
-      ...(actionItems.length > 0
-        ? [`Action items: ${actionItems.join("; ")}`]
-        : []),
-    ].join("\n");
+    // ── Descriptive timeline event ────────────────────────────────
+    const timelineParts: string[] = ["📧 Synced from Gmail"];
+
+    if (isNew) {
+      timelineParts.push(`New application created with status: ${newStatus}`);
+    } else if (statusDidChange && previousStatus) {
+      timelineParts.push(
+        `Status updated: ${previousStatus} → ${newStatus}`
+      );
+    } else if (previousStatus) {
+      timelineParts.push(
+        `Sync received (status unchanged: ${previousStatus})`
+      );
+    }
+
+    if (actionItems.length > 0) {
+      timelineParts.push(`Action items: ${actionItems.join("; ")}`);
+    }
 
     await prisma.timelineEvent.create({
       data: {
         applicationId: application.id,
-        content: timelineContent,
+        content: timelineParts.join("\n"),
       },
     });
 
+    // ── Create tasks from extracted deadlines ─────────────────────
+    let createdTaskCount = 0;
+    if (tasks.length > 0) {
+      for (const task of tasks) {
+        await prisma.task.create({
+          data: {
+            title: task.title,
+            dueDate: task.dueDate ? new Date(task.dueDate) : null,
+            isCompleted: false,
+            applicationId: application.id,
+          },
+        });
+        createdTaskCount++;
+      }
+
+      // Log task creation as a separate timeline event
+      await prisma.timelineEvent.create({
+        data: {
+          applicationId: application.id,
+          content: [
+            `📋 ${createdTaskCount} task${createdTaskCount > 1 ? "s" : ""} created via Gmail Sync`,
+            ...tasks.map(
+              (t) =>
+                `• ${t.title}${t.dueDate ? " — due " + new Date(t.dueDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : ""}`
+            ),
+          ].join("\n"),
+        },
+      });
+    }
+
     // ── 5. Return success card ──────────────────────────────────────
-    return Response.json(buildSuccessCard(extraction.data, isNew));
+    return Response.json(
+      buildSuccessCard(
+        extraction.data,
+        isNew,
+        isNew ? undefined : previousStatus,
+        createdTaskCount
+      )
+    );
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return Response.json(

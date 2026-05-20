@@ -1,0 +1,173 @@
+{
+  "info": {
+    "name": "CareerCRM Gmail Add-on",
+    "description": "Local testing collection for the CareerCRM Gmail Add-on endpoints.\n\nSet the `tunnel_url` variable in the environment to your ngrok/localtunnel URL.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "tunnel_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Production Endpoints",
+      "item": [
+        {
+          "name": "POST Homepage — Sidebar Card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{tunnel_url}}/api/addon/homepage",
+              "host": ["{{tunnel_url}}"],
+              "path": ["api", "addon", "homepage"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"commonEventObject\": {\n    \"hostApp\": \"GMAIL\",\n    \"platform\": \"WEB\",\n    \"userLocale\": \"en\",\n    \"timeZone\": {\n      \"id\": \"Asia/Kolkata\",\n      \"offset\": 19800000\n    }\n  },\n  \"authorizationEventObject\": {\n    \"userOAuthToken\": \"ya29.mock-token-not-needed-for-homepage\",\n    \"userIdToken\": \"eyJhbGciOiJSUzI1NiJ9.mock\",\n    \"systemIdToken\": \"eyJhbGciOiJSUzI1NiJ9.mock\"\n  },\n  \"gmail\": {}\n}"
+            }
+          }
+        },
+        {
+          "name": "POST Sync — Real Gmail (needs valid OAuth)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{tunnel_url}}/api/addon/sync",
+              "host": ["{{tunnel_url}}"],
+              "path": ["api", "addon", "sync"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"commonEventObject\": {\n    \"hostApp\": \"GMAIL\",\n    \"platform\": \"WEB\",\n    \"userLocale\": \"en\",\n    \"timeZone\": {\n      \"id\": \"Asia/Kolkata\",\n      \"offset\": 19800000\n    }\n  },\n  \"authorizationEventObject\": {\n    \"userOAuthToken\": \"ya29.REPLACE_WITH_REAL_OAUTH_TOKEN\",\n    \"userIdToken\": \"eyJhbGciOiJSUzI1NiJ9.mock\",\n    \"systemIdToken\": \"eyJhbGciOiJSUzI1NiJ9.mock\"\n  },\n  \"gmail\": {\n    \"messageId\": \"REPLACE_WITH_REAL_MESSAGE_ID\",\n    \"threadId\": \"REPLACE_WITH_REAL_THREAD_ID\",\n    \"accessToken\": \"ya29.REPLACE_WITH_REAL_OAUTH_TOKEN\"\n  }\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test Bypass Endpoints",
+      "item": [
+        {
+          "name": "POST Sync-Test — Gemini + DB (email text)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{tunnel_url}}/api/addon/sync-test",
+              "host": ["{{tunnel_url}}"],
+              "path": ["api", "addon", "sync-test"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailText\": \"Dear Mayank,\\n\\nThank you for applying to the Software Engineer position at Google. We were impressed with your background and would like to invite you to a technical phone screen.\\n\\nPlease use this link to schedule a 45-minute call: https://calendly.com/google-recruiting/phone-screen\\n\\nDeadline to schedule: June 5, 2026.\\n\\nBest regards,\\nGoogle Recruiting Team\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST Sync-Test — DB Only (mock extraction)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{tunnel_url}}/api/addon/sync-test",
+              "host": ["{{tunnel_url}}"],
+              "path": ["api", "addon", "sync-test"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailText\": \"placeholder — not sent to LLM\",\n  \"mockExtraction\": {\n    \"companyName\": \"Google\",\n    \"roleTitle\": \"Software Engineer\",\n    \"newStatus\": \"INTERVIEW\",\n    \"actionItems\": [\n      \"Schedule phone screen via Calendly link\",\n      \"Complete by June 5, 2026\"\n    ],\n    \"tasks\": [\n      {\n        \"title\": \"Schedule phone screen via Calendly\",\n        \"dueDate\": \"2026-06-05T00:00:00.000Z\"\n      }\n    ]\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "POST Sync-Test — Offer Letter (Gemini)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{tunnel_url}}/api/addon/sync-test",
+              "host": ["{{tunnel_url}}"],
+              "path": ["api", "addon", "sync-test"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailText\": \"Dear Mayank,\\n\\nWe are pleased to extend an offer for the Senior Software Engineer position at Microsoft. Your annual compensation will be $185,000 with a $30,000 signing bonus.\\n\\nPlease review the attached offer letter and respond by June 10, 2026.\\n\\nCongratulations!\\nMicrosoft Talent Acquisition\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST Sync-Test — Rejection (Gemini)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{tunnel_url}}/api/addon/sync-test",
+              "host": ["{{tunnel_url}}"],
+              "path": ["api", "addon", "sync-test"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailText\": \"Dear Mayank,\\n\\nThank you for your interest in the Product Manager role at Amazon. After careful consideration, we have decided to move forward with other candidates whose experience more closely aligns with the role requirements.\\n\\nWe encourage you to apply again in the future as new positions become available.\\n\\nBest regards,\\nAmazon Recruiting\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST Sync-Test — Assessment (Gemini)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{tunnel_url}}/api/addon/sync-test",
+              "host": ["{{tunnel_url}}"],
+              "path": ["api", "addon", "sync-test"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailText\": \"Hi Mayank,\\n\\nAs the next step in your application for the Backend Engineer role at Stripe, we'd like you to complete a take-home coding challenge.\\n\\nYou'll receive a HackerRank link within the next 24 hours. The assessment will take approximately 90 minutes and must be completed within 5 days.\\n\\nGood luck!\\nStripe Engineering Hiring\"\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,83 +1,50 @@
-import { NextRequest } from "next/server";
+import { NextResponse } from 'next/server';
 
-/**
- * Google Workspace Gmail Add-on — Homepage Trigger (Alternate Runtime)
- *
- * Google sends a POST request to this endpoint when the add-on sidebar opens.
- * We return a RenderActions JSON payload containing a single Card with a
- * "Sync Application Update" button that calls the /api/addon/sync endpoint.
- *
- * @see https://developers.google.com/apps-script/add-ons/alternate-runtimes
- * @see https://developers.google.com/workspace/add-ons/reference/rpc/google.apps.card.v1
- */
-
-// Replace this with your actual ngrok or Vercel deployment URL
-const BASE_URL =
-  process.env.ADDON_BASE_URL || "https://YOUR_NGROK_OR_VERCEL_URL";
-
-export async function POST(request: NextRequest) {
-  // Google sends context about the host app; we can use it later
-  // const body = await request.json();
-
-  const cardResponse = {
+export async function POST(request) {
+  const cardUI = {
     action: {
       navigations: [
         {
           pushCard: {
             header: {
-              title: "CareerCRM Sync",
-              subtitle: "Manage your job applications",
-              imageUrl: `${BASE_URL}/icon.png`,
-              imageType: "CIRCLE",
+              title: "CareerCRM Tracker",
+              subtitle: "Sync applications from your inbox",
+              imageUrl: "https://www.gstatic.com/images/icons/material/system/2x/work_black_24dp.png",
+              imageType: "SQUARE" // <-- This is the fix!
             },
             sections: [
               {
-                header: "Quick Actions",
+                header: "Current Email Status",
                 widgets: [
                   {
-                    decoratedText: {
-                      topLabel: "STATUS",
-                      text: "Connected to CareerCRM",
-                      startIcon: {
-                        knownIcon: "STAR",
-                      },
-                    },
-                  },
-                  {
-                    decoratedText: {
-                      topLabel: "SYNC",
-                      text: "Pull application updates from this email thread into your CRM pipeline.",
-                      wrapText: true,
-                    },
+                    textParagraph: {
+                      text: "Click the button below to extract the job details from this email and sync it to your CareerCRM database."
+                    }
                   },
                   {
                     buttonList: {
                       buttons: [
                         {
                           text: "Sync Application Update",
-                          color: {
-                            red: 0.44,
-                            green: 0.36,
-                            blue: 0.86,
-                            alpha: 1,
-                          },
+                          color: { red: 0, green: 0, blue: 1, alpha: 1 },
                           onClick: {
                             action: {
-                              function: `${BASE_URL}/api/addon/sync`,
-                            },
-                          },
-                        },
-                      ],
-                    },
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      ],
-    },
+                              function: process.env.NEXT_PUBLIC_NGROK_URL + "/api/addon/sync",
+                              parameters: []
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
   };
 
-  return Response.json(cardResponse);
+  return NextResponse.json(cardUI);
 }
